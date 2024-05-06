@@ -1,5 +1,5 @@
 # PHRO
-### PHRO - PHP Route / Router Library
+### PHRO is PHP Route / Router Library
 PHRO is a PHP library for defining and handling HTTP routes in PHP applications.
 
 ## Features
