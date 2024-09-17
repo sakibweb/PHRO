@@ -49,3 +49,8 @@ $router->listen(function() {
     echo "404 Not Found";
 });
 ```
+### Displaying All Routes
+Get all defined routes with full link and method:
+```
+print_r(PHRO::routes());
+```
