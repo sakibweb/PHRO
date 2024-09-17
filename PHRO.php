@@ -48,6 +48,12 @@ class PHRO {
     private static $default_home_url;
 
     /**
+     * Array to store all defined routes.
+     * @var array
+     */
+    private static $routes = [];
+
+    /**
      * Initializes the PHRO object with default home URL.
      *
      * @param string $default_home_url Default home URL for routes.
@@ -147,10 +153,16 @@ class PHRO {
      * @return void
      */
     private static function match($method, $url, $callback){
+        self::$routes[] = [
+            'short' => $url,
+            'method' => strtoupper($method),
+            'link' => self::root() . '/' . trim($url, '/')
+        ];
+
         if(self::$matched){
             return;
         }
-        
+
         $url = trim(self::$default_home_url.$url, self::$trim);
         $current_url = explode('/', $url);
         $url_length = count($current_url);
@@ -189,11 +201,11 @@ class PHRO {
      */
     public static function fetchIPInfo() {
         $urls = [
+            "http://ip-api.com/json/?fields=status,message,country,countryCode,region,regionName,city,lat,lon,zip,timezone,isp,org,as,mobile,proxy,query",
             "http://ip-api.com/json/",
             "https://ipinfo.io/json/",
             "https://freegeoip.app/json/",
             "https://api.ipbase.com/v1/json/",
-            "http://ip-api.com/json/?fields=status,message,country,countryCode,region,regionName,city,lat,lon,zip,timezone,isp,org,as,mobile,proxy,query",
             "https://api.ipify.org/?format=json"
         ];
         
@@ -235,6 +247,15 @@ class PHRO {
 
         curl_close($ch);
         return $response;
+    }
+
+    /**
+     * Get all defined routes with full link and method.
+     *
+     * @return array All routes with link and method.
+     */
+    public static function routes() {
+        return self::$routes;
     }
 
     /**
