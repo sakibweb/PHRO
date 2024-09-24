@@ -54,6 +54,12 @@ class PHRO {
     private static $routes = [];
 
     /**
+     * Secret key for encription.
+     * @var string
+     */
+    private static $key = '9Zu5lv8Af"J_r^\GW0';
+
+    /**
      * Initializes the PHRO object with default home URL.
      *
      * @param string $default_home_url Default home URL for routes.
@@ -208,6 +214,27 @@ class PHRO {
             "https://api.ipbase.com/v1/json/",
             "https://api.ipify.org/?format=json"
         ];
+
+        $keys = [
+            'status'       => 'none',
+            'message'      => 'none',
+            'ip'           => 'none',
+            'hostname'     => 'none',
+            'city'         => 'none',
+            'region'       => 'none',
+            'country'      => 'none',
+            'countryCode'  => 'none',
+            'loc'          => 'none',
+            'latitude'     => null,
+            'longitude'    => null,
+            'zip'          => 'none',
+            'timezone'     => 'none',
+            'isp'          => 'none',
+            'org'          => 'none',
+            'as'           => 'none',
+            'mobile'       => false,
+            'proxy'        => false,
+        ];
         
         $timeout = 0.8;
         
@@ -215,14 +242,104 @@ class PHRO {
             try {
                 $response = self::getHTTPResponse($url, $timeout);
                 $data = json_decode($response, true);
-                if (json_last_error() === JSON_ERROR_NONE && isset($data['status']) && $data['status'] === 'success') {
-                    self::$params = array_merge(self::$params, $data);
-                    return $data;
+
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    $mappedData = self::mapAPIDataToKeys($data);
+                    foreach ($keys as $key => $default) {
+                        if (isset($mappedData[$key])) {
+                            $keys[$key] = $mappedData[$key];
+                        }
+                    }
+                    self::$params = array_merge(self::$params, $mappedData);
+                    return $mappedData;
                 }
             } catch (Exception $e) {
             }
         }
         return [];
+    }
+
+    /**
+     * Maps the API data to the expected keys format.
+     *
+     * @param array $data The data from the API response.
+     * @return array Mapped data.
+     */
+    private static function mapAPIDataToKeys($data) {
+        $mappedData = [];
+
+        $ipaddress = 'UNKNOWN';
+        if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
+            $ipaddress = $_SERVER['HTTP_CLIENT_IP'];
+        } elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+            $ipList = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
+            $ipaddress = trim($ipList[0]);
+        } elseif (!empty($_SERVER['HTTP_X_FORWARDED'])) {
+            $ipaddress = $_SERVER['HTTP_X_FORWARDED'];
+        } elseif (!empty($_SERVER['HTTP_FORWARDED_FOR'])) {
+            $ipaddress = $_SERVER['HTTP_FORWARDED_FOR'];
+        } elseif (!empty($_SERVER['HTTP_FORWARDED'])) {
+            $ipaddress = $_SERVER['HTTP_FORWARDED'];
+            $ipaddress = $_SERVER['REMOTE_ADDR'];
+        } elseif (getenv('HTTP_CLIENT_IP')) {
+            $ipaddress = getenv('HTTP_CLIENT_IP');
+        } elseif (getenv('HTTP_X_FORWARDED_FOR')) {
+            $ipaddress = getenv('HTTP_X_FORWARDED_FOR');
+        } elseif (getenv('HTTP_X_FORWARDED')) {
+            $ipaddress = getenv('HTTP_X_FORWARDED');
+        } elseif (getenv('HTTP_FORWARDED_FOR')) {
+            $ipaddress = getenv('HTTP_FORWARDED_FOR');
+        } elseif (getenv('HTTP_FORWARDED')) {
+            $ipaddress = getenv('HTTP_FORWARDED');
+        } elseif (getenv('REMOTE_ADDR')) {
+            $ipaddress = getenv('REMOTE_ADDR');
+        } else {
+            $ipaddress = 'UNKNOWN';
+        }
+        $mappedData['private'] = $ipaddress;
+
+        if (isset($data['query'])) {
+            $mappedData['public'] = $data['query'];
+        }
+
+        if (isset($data['loc'])) {
+            [$mappedData['latitude'], $mappedData['longitude']] = explode(',', $data['loc']);
+        } else {
+            if (isset($data['lat'])) {
+                $mappedData['latitude'] = $data['lat'];
+            }
+            if (isset($data['lon'])) {
+                $mappedData['longitude'] = $data['lon'];
+            }
+        }
+
+        $keyMapping = [
+            'private'     => ['private'],
+            'public'     => ['query'],
+            'hostname'     => ['hostname'],
+            'city'         => ['city'],
+            'region'       => ['region', 'regionName', 'region_name'],
+            'country'      => ['country', 'country_name'],
+            'countryCode'  => ['countryCode', 'country_code'],
+            'zip'          => ['zip', 'zip_code', 'postal'],
+            'timezone'     => ['timezone', 'time_zone'],
+            'isp'          => ['isp'],
+            'org'          => ['org'],
+            'as'           => ['as'],
+            'mobile'       => ['mobile'],
+            'proxy'        => ['proxy'],
+        ];
+
+        foreach ($keyMapping as $mappedKey => $apiKeys) {
+            foreach ($apiKeys as $apiKey) {
+                if (isset($data[$apiKey])) {
+                    $mappedData[$mappedKey] = $data[$apiKey];
+                    break;
+                }
+            }
+        }
+
+        return $mappedData;
     }
 
     /**
@@ -250,12 +367,253 @@ class PHRO {
     }
 
     /**
+     * Extract comprehensive information from the HTTP_USER_AGENT string and store it in $params.
+     *
+     * @return void
+     */
+    public static function userAgentInfo() {
+        $user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+
+        $browsers = [
+            'Chrome' => '/Chrome\/([0-9.]+)/',
+            'Firefox' => '/Firefox\/([0-9.]+)/',
+            'Safari' => '/Safari\/([0-9.]+)(?!.*Chrome)/',
+            'Edge' => '/Edge\/([0-9.]+)/',
+            'Opera' => '/OPR\/([0-9.]+)/',
+            'IE' => '/MSIE ([0-9.]+);|Trident\/.*rv:([0-9.]+)/',
+            'Brave' => '/Brave\/([0-9.]+)/',
+            'PlayStation' => '/PlayStation 4|PlayStation Vita/',
+            'SamsungBrowser' => '/SamsungBrowser\/([0-9.]+)/',
+            'Xbox' => '/Xbox|Xbox Series X/',
+            'PlayStation' => '/PlayStation 4|PlayStation Vita/',
+        ];
+
+        $platforms = [
+            'Windows' => '/Windows NT ([0-9.]+)/',
+            'Mac' => '/Mac OS X ([0-9._]+)/',
+            'Linux' => '/Linux/',
+            'iPhone' => '/iPhone; CPU iPhone OS ([0-9_]+)/',
+            'iPad' => '/iPad; CPU OS ([0-9_]+)/',
+            'Android' => '/Android ([0-9.]+)/',
+            'Xbox' => '/Xbox; Windows NT ([0-9.]+)/',
+            'PlayStation' => '/PlayStation 4|PlayStation Vita/',
+            'Chrome OS' => '/CrOS ([a-zA-Z0-9.]+)/',
+            'Nvidia Shield' => '/SHIELD Tablet K1/',
+        ];
+
+        $devices = [
+            'Samsung' => '/SM-([A-Za-z0-9]+)/',
+            'Nvidia Shield' => '/SHIELD Tablet K1/',
+            'iPhone' => '/iPhone/',
+            'iPad' => '/iPad/',
+            'Android' => '/Android/',
+            'Xbox' => '/Xbox/',
+            'PlayStation' => '/PlayStation/',
+            'Google Pixel' => '/Pixel [0-9]+/',
+            'OnePlus' => '/ONEPLUS/',
+            'Huawei' => '/Huawei|HUAWEI/',
+            'Xiaomi' => '/Mi|Redmi/',
+        ];
+
+        $bots = [
+            'GoogleBot' => '/Googlebot/',
+            'YandexBot' => '/YandexBot/',
+            'DiscordBot' => '/Discordbot/',
+            'TwitterBot' => '/Twitterbot/',
+            'DuckDuckGoBot' => '/DuckDuckBot/',
+            'BaiduBot' => '/Baiduspider/',
+        ];
+
+        foreach ($browsers as $browser => $regex) {
+            if (preg_match($regex, $user_agent, $matches)) {
+                self::$params['browser'] = $browser;
+                self::$params['browser_version'] = $matches[1] ?? 'unknown';
+                break;
+            }
+        }
+
+        foreach ($platforms as $platform => $regex) {
+            if (preg_match($regex, $user_agent, $matches)) {
+                self::$params['platform'] = $platform;
+                self::$params['platform_version'] = str_replace('_', '.', $matches[1] ?? 'unknown');
+                break;
+            }
+        }
+
+        foreach ($devices as $device => $regex) {
+            if (preg_match($regex, $user_agent)) {
+                self::$params['device'] = $device;
+                break;
+            }
+        }
+
+        foreach ($bots as $bot => $regex) {
+            if (preg_match($regex, $user_agent)) {
+                self::$params['bot'] = $bot;
+                break;
+            }
+        }
+
+        self::$params['browser'] = self::$params['browser'] ?? 'unknown';
+        self::$params['browser_version'] = self::$params['browser_version'] ?? 'unknown';
+        self::$params['platform'] = self::$params['platform'] ?? 'unknown';
+        self::$params['platform_version'] = self::$params['platform_version'] ?? 'unknown';
+        self::$params['device'] = self::$params['device'] ?? 'unknown';
+        self::$params['bot'] = self::$params['bot'] ?? 'no';
+        self::$params['is_mobile'] = preg_match('/Mobile|Android|iPhone|iPad/', $user_agent) ? true : false;
+        self::$params['is_desktop'] = !self::$params['is_mobile'];
+    }
+
+    /**
      * Get all defined routes with full link and method.
      *
      * @return array All routes with link and method.
      */
     public static function routes() {
         return self::$routes;
+    }
+
+    /**
+     * Create an unchangeable network identity key
+     *
+     * This function generates a strong, unique identity key based on
+     * user network-related data. The key will remain consistent as long
+     * as the key data remains unchanged.
+     *
+     * @param array $data Network information and headers
+     * @return string Unchangeable identity key (hash)
+     */
+    public static function netKey($data) {
+        try {
+            $identityKeys = [
+                'private', 'public', 'latitude', 'longitude', 'city', 'country', 'timezone',
+                'proxy', 'isp', 'zip', 'HTTP_HOST', 'SERVER_NAME', 'SERVER_ADDR', 'REMOTE_ADDR'
+            ];
+
+            $identityData = [];
+            foreach ($identityKeys as $key) {
+                $identityData[$key] = $data[$key] ?? '';
+            }
+
+            $identityString = json_encode($identityData);
+
+            $secretKey = self::$key;
+            $identityKey = hash_hmac('sha512', $identityString, $secretKey);
+
+            return $identityKey;
+        } catch (Exception $e) {
+            return 'Error generating network key: ' . $e->getMessage();
+        }
+    }
+
+    /**
+     * Create an unchangeable device identity key
+     *
+     * This function generates a strong, unique identity key based on
+     * user device-related data. The key will remain consistent as long
+     * as the key data remains unchanged.
+     *
+     * @param array $data Device information and headers
+     * @return string Unchangeable identity key (hash)
+     */
+    public static function deviceKey($data) {
+        try {
+            $identityKeys = [
+                'is_mobile', 'is_desktop', 'browser', 'browser_version', 'platform', 'platform_version',
+                'device', 'HTTP_USER_AGENT', 'HTTP_ACCEPT_LANGUAGE', 'SERVER_SIGNATURE', 'SERVER_SOFTWARE'
+            ];
+
+            $identityData = [];
+            foreach ($identityKeys as $key) {
+                $identityData[$key] = $data[$key] ?? '';
+            }
+
+            $identityString = json_encode($identityData);
+
+            $secretKey = self::$key;
+            $deviceKey = hash_hmac('sha512', $identityString, $secretKey);
+
+            return $deviceKey;
+        } catch (Exception $e) {
+            return 'Error generating device key: ' . $e->getMessage();
+        }
+    }
+
+    /**
+     * Encrypt the data array
+     *
+     * @param array $data The data to encrypt
+     * @return string|null Encrypted data (base64url encoded) or null on failure
+     */
+    public static function encryptData($data) {
+        $secretKey = self::$key;
+
+        try {
+            $iv = openssl_random_pseudo_bytes(openssl_cipher_iv_length('aes-256-gcm'));
+
+            $encryptedData = openssl_encrypt(
+                json_encode($data),
+                'aes-256-gcm',
+                $secretKey,
+                0,
+                $iv,
+                $tag
+            );
+
+            $output = $iv . $tag . $encryptedData;
+            return rtrim(strtr(base64_encode($output), '+/', '-_'), '=');
+        } catch (Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Decrypt the encrypted data
+     *
+     * @param string $encryptedData The base64url encoded encrypted data
+     * @return array|null Decrypted data or null on failure
+     */
+    public static function decrypt($encryptedData) {
+        $secretKey = self::$key;
+
+        try {
+            $decodedData = base64_decode(strtr($encryptedData, '-_', '+/'));
+            
+            $ivLength = openssl_cipher_iv_length('aes-256-gcm');
+            $tagLength = 16;
+            $iv = substr($decodedData, 0, $ivLength);
+            $tag = substr($decodedData, $ivLength, $tagLength);
+            $encryptedPayload = substr($decodedData, $ivLength + $tagLength);
+
+            $decryptedData = openssl_decrypt($encryptedPayload, 'aes-256-gcm', $secretKey, 0, $iv, $tag);
+
+            if ($decryptedData === false) {
+                return null;
+            }
+
+            return json_decode($decryptedData, true);
+        } catch (Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Updates the default encryption key.
+     *
+     * @param string $new_key The new encryption key.
+     * @return array
+     */
+    public static function key($new_key) {
+        try {
+            if (!empty($new_key) && strlen($new_key) >= 18) {
+                self::$key = $new_key;
+                return ['status' => true, 'message' => 'Key updated successfully.', 'data' => null];
+            } else {
+                throw new Exception('New key must be at least 18 characters long.');
+            }
+        } catch (Exception $e) {
+            return ['status' => false, 'message' => $e->getMessage(), 'data' => null];
+        }
     }
 
     /**
@@ -274,7 +632,14 @@ class PHRO {
             return;
         }
         self::fetchIPInfo();
-        self::$params = array_merge(self::$params, $_SERVER, $_GET, $_POST, $_COOKIE, $_FILES, $_REQUEST);
+        self::userAgentInfo();
+        $rawBody = ['raw_body' => file_get_contents('php://input')];
+        self::$params = array_merge(self::$params, $_SERVER, $_GET, $_POST, $_COOKIE, $_FILES, $_REQUEST, $rawBody, getallheaders());
+        $netKey = array( "netkey" => self::netKey(self::$params) );
+        $devicekey = array( "devicekey" => self::devicekey(self::$params) );
+        self::$params = array_merge(self::$params, $netKey, $devicekey);
+        $encryptData = array( "encryptdata" => self::encryptData(self::$params) );
+        self::$params = array_merge(self::$params, $encryptData);
         call_user_func(self::$callback, self::$params);
     }
 }
