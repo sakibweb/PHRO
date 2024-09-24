@@ -57,7 +57,7 @@ class PHRO {
      * Secret key for encription.
      * @var string
      */
-    private static $key = '9Zu5lv8Af"J_r^\GW0';
+    private static $key = '';
 
     /**
      * Initializes the PHRO object with default home URL.
@@ -498,6 +498,10 @@ class PHRO {
             $identityString = json_encode($identityData);
 
             $secretKey = self::$key;
+            if (empty($secretKey) || strlen($secretKey) < 18) {
+                throw new Exception('New key must be at least 18 characters long.');
+            }
+            
             $identityKey = hash_hmac('sha512', $identityString, $secretKey);
 
             return $identityKey;
@@ -531,6 +535,10 @@ class PHRO {
             $identityString = json_encode($identityData);
 
             $secretKey = self::$key;
+            if (empty($secretKey) || strlen($secretKey) < 18) {
+                throw new Exception('New key must be at least 18 characters long.');
+            }
+            
             $deviceKey = hash_hmac('sha512', $identityString, $secretKey);
 
             return $deviceKey;
@@ -545,10 +553,13 @@ class PHRO {
      * @param array $data The data to encrypt
      * @return string|null Encrypted data (base64url encoded) or null on failure
      */
-    public static function encryptData($data) {
-        $secretKey = self::$key;
-
+    private static function encrypt($data) {
         try {
+            $secretKey = self::$key;
+            if (empty($secretKey) || strlen($secretKey) < 18) {
+                throw new Exception('New key must be at least 18 characters long.');
+            }
+
             $iv = openssl_random_pseudo_bytes(openssl_cipher_iv_length('aes-256-gcm'));
 
             $encryptedData = openssl_encrypt(
@@ -574,9 +585,12 @@ class PHRO {
      * @return array|null Decrypted data or null on failure
      */
     public static function decrypt($encryptedData) {
-        $secretKey = self::$key;
-
         try {
+            $secretKey = self::$key;
+            if (empty($secretKey) || strlen($secretKey) < 18) {
+                throw new Exception('New key must be at least 18 characters long.');
+            }
+
             $decodedData = base64_decode(strtr($encryptedData, '-_', '+/'));
             
             $ivLength = openssl_cipher_iv_length('aes-256-gcm');
@@ -638,7 +652,7 @@ class PHRO {
         $netKey = array( "netkey" => self::netKey(self::$params) );
         $devicekey = array( "devicekey" => self::devicekey(self::$params) );
         self::$params = array_merge(self::$params, $netKey, $devicekey);
-        $encryptData = array( "encryptdata" => self::encryptData(self::$params) );
+        $encryptData = array( "encryptdata" => self::encrypt(self::$params) );
         self::$params = array_merge(self::$params, $encryptData);
         call_user_func(self::$callback, self::$params);
     }
