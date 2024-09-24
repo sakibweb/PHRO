@@ -69,7 +69,13 @@ class PHRO {
         self::$default_home_url = $default_home_url;
         $url = trim($_SERVER['REQUEST_URI'], self::$trim);
         self::$server_method = strtolower($_SERVER['REQUEST_METHOD']);
-        self::$server_url = explode('/', $url);
+        preg_match('/^(.*?)\?/', $url, $matches);
+
+        if (isset($matches[1])) {
+            self::$server_url = explode('/', trim($matches[1], '/'));
+        } else {
+            self::$server_url = explode('/', trim($url, '/'));
+        }
     }
 
     /**
@@ -148,6 +154,25 @@ class PHRO {
      */
     public static function add($method, $url, $callback){
         self::match(strtolower($method), $url, $callback);
+    }
+
+    /**
+     * Define a group of routes with a shared URL prefix.
+     *
+     * This method allows you to define multiple routes under a specific URL prefix. 
+     * The callback function provided will contain the route definitions.
+     *
+     * @param string $prefix The URL prefix to be added to the group of routes.
+     * @param callable $callback The callback function where route definitions are made.
+     * @return void
+     */
+    public static function group($prefix, $callback) {
+        $original_prefix = self::$default_home_url;
+        self::$default_home_url .= $prefix;
+    
+        call_user_func($callback);
+    
+        self::$default_home_url = $original_prefix;
     }
 
     /**
