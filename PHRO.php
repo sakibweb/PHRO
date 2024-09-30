@@ -656,6 +656,35 @@ class PHRO {
     }
 
     /**
+     * Collect and process request data, generate unique identifiers, and handle encryption.
+     * 
+     * The `footprint` function is used to capture various request information and generate unique keys
+     * for network and device identification. This function performs the following actions:
+     * 
+     * - Fetches IP and user-agent information.
+     * - Collects raw input data from the HTTP request body.
+     * - Merges various PHP superglobals (e.g., $_SERVER, $_GET, $_POST, $_COOKIE, $_FILES, $_REQUEST) and custom data.
+     * - Generates unique keys (`netKey` and `devicekey`) based on request parameters.
+     * - Encrypts the collected data and includes it in the final request parameters.
+     * 
+     * The merged data is returned as `self::$params`.
+     *
+     * @return array Updated and enriched request parameters.
+     */
+    public static function footprint(){
+        self::fetchIPInfo();
+        self::userAgentInfo();
+        $rawBody = ['raw_body' => file_get_contents('php://input')];
+        self::$params = array_merge(self::$params, $_SERVER, $_GET, $_POST, $_COOKIE, $_FILES, $_REQUEST, $rawBody, getallheaders());
+        $netKey = array( "netkey" => self::netKey(self::$params) );
+        $devicekey = array( "devicekey" => self::devicekey(self::$params) );
+        self::$params = array_merge(self::$params, $netKey, $devicekey);
+        $encryptData = array( "encryptdata" => self::encrypt(self::$params) );
+        self::$params = array_merge(self::$params, $encryptData);
+        return self::$params;
+    }
+
+    /**
      * Listen for incoming HTTP requests and execute matching route callback.
      *
      * @param callable|null $not_found_callback Callback function to execute when no route is matched.
