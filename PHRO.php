@@ -675,8 +675,11 @@ class PHRO {
         self::fetchIPInfo();
         self::userAgentInfo();
         $rawBody = ['raw_body' => file_get_contents('php://input')];
-        $times = ['request_timestamp' => time(), 'request_time' => date("h:i A"), 'request_date' => date("d/m/y")];
-        self::$params = array_merge(self::$params, $times, $_SERVER, $_GET, $_POST, $_COOKIE, $_FILES, $_REQUEST, $rawBody, getallheaders());
+        $decodedDataRAW = json_decode($rawBody['raw_body'], true);
+        if (json_last_error() === JSON_ERROR_NONE) {
+            self::$params = array_merge(self::$params, $decodedDataRAW);
+        }
+        self::$params = array_merge(self::$params, $_SERVER, $_GET, $_POST, $_COOKIE, $_FILES, $_REQUEST, $rawBody, getallheaders());
         $netKey = array( "netkey" => self::netKey(self::$params) );
         $devicekey = array( "devicekey" => self::devicekey(self::$params) );
         self::$params = array_merge(self::$params, $netKey, $devicekey);
@@ -700,7 +703,20 @@ class PHRO {
             }
             return;
         }
-        call_user_func(self::$callback, self::footprint());
+        self::fetchIPInfo();
+        self::userAgentInfo();
+        $rawBody = ['raw_body' => file_get_contents('php://input')];
+        $decodedDataRAW = json_decode($rawBody['raw_body'], true);
+        if (json_last_error() === JSON_ERROR_NONE) {
+            self::$params = array_merge(self::$params, $decodedDataRAW);
+        }
+        self::$params = array_merge(self::$params, $_SERVER, $_GET, $_POST, $_COOKIE, $_FILES, $_REQUEST, $rawBody, getallheaders());
+        $netKey = array( "netkey" => self::netKey(self::$params) );
+        $devicekey = array( "devicekey" => self::devicekey(self::$params) );
+        self::$params = array_merge(self::$params, $netKey, $devicekey);
+        $encryptData = array( "encryptdata" => self::encrypt(self::$params) );
+        self::$params = array_merge(self::$params, $encryptData);
+        call_user_func(self::$callback, self::$params);
     }
 }
 ?>
